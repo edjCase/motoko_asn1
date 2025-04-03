@@ -1,12 +1,13 @@
 [dependencies]
-base = "0.11.3"
+base = "0.14.6"
+new-base = "0.3.0"
 
 [package]
-name = ""
+name = "asn1"
 version = "0.0.1"
 description = ""
-repository = "https://github.com/edjcase/"
-keywords = [  ]
+repository = "https://github.com/edjcase/motoko_asn1"
+keywords = [ "ASN.1", "ASN1", "DER", "encode", "decode" ]
 license = "MIT"
 
 [dev-dependencies]
