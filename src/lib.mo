@@ -529,7 +529,7 @@ module {
     // ===== ENCODER FUNCTIONS =====
 
     // Encode an ASN.1 value to DER
-    private func encodeDER(value : ASN1Value) : Result.Result<[Nat8], Text> {
+    public func encodeDER(value : ASN1Value) : Result.Result<[Nat8], Text> {
         let encoded = Buffer.Buffer<Nat8>(64); // Initial size estimate
 
         switch (value) {
