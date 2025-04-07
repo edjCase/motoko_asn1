@@ -74,9 +74,9 @@ module {
     // ===== DECODER FUNCTIONS =====
 
     // Main ASN.1 parser function
-    public func decodeDER(bytes : [Nat8]) : Result.Result<ASN1Value, Text> {
+    public func decodeDER(bytes : Iter.Iter<Nat8>) : Result.Result<ASN1Value, Text> {
         // Convert byte array to iterator
-        let byteIter = IterTools.peekable<Nat8>(bytes.vals());
+        let byteIter = IterTools.peekable<Nat8>(bytes);
         switch (decodeInternal(byteIter)) {
             case (#err(e)) return #err(e);
             case (#ok(value)) {

@@ -804,7 +804,7 @@ test(
 
     for (testCase in cases.vals()) {
       // Test decodeDER
-      let result = ASN1.decodeDER(Blob.toArray(testCase.derBytes));
+      let result = ASN1.decodeDER(testCase.derBytes.vals());
 
       switch (result) {
         case (#ok(actualValue)) {
