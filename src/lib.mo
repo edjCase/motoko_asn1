@@ -10,6 +10,7 @@ import Result "mo:base/Result";
 import IterTools "mo:itertools/Iter";
 import PeekableIter "mo:itertools/PeekableIter";
 import Int "mo:new-base/Int";
+import Blob "mo:new-base/Blob";
 import IntX "mo:xtended-numbers/IntX";
 
 module {
@@ -519,16 +520,8 @@ module {
         switch (byteResult) {
             case (#err(e)) return #err(e);
             case (#ok(value)) {
-                // Simple ASCII conversion for now
-                // A full implementation would need proper UTF-8 decoding
-                let chars = Array.map<Nat8, Char>(
-                    value,
-                    func(b) {
-                        Char.fromNat32(Nat32.fromNat(Nat8.toNat(b)));
-                    },
-                );
-
-                #ok(Text.fromIter(chars.vals()));
+                let ?text = Text.decodeUtf8(Blob.fromArray(value)) else return #err("Invalid UTF-8 string");
+                #ok(text);
             };
         };
     };
@@ -839,11 +832,7 @@ module {
                 let tag = encodeTag(#universal, false, TAG_UTCTIME);
                 for (b in tag.vals()) encoded.add(b);
 
-                // Simple ASCII encoding
-                let bytes = Array.map<Char, Nat8>(
-                    Iter.toArray(Text.toIter(time)),
-                    func(c) { Nat8.fromNat(Nat32.toNat(Char.toNat32(c))) },
-                );
+                let bytes = Text.encodeUtf8(time);
 
                 // Length
                 let length = encodeLength(bytes.size());
@@ -857,11 +846,7 @@ module {
                 let tag = encodeTag(#universal, false, TAG_GENERALIZEDTIME);
                 for (b in tag.vals()) encoded.add(b);
 
-                // Simple ASCII encoding
-                let bytes = Array.map<Char, Nat8>(
-                    Iter.toArray(Text.toIter(time)),
-                    func(c) { Nat8.fromNat(Nat32.toNat(Char.toNat32(c))) },
-                );
+                let bytes = Text.encodeUtf8(time);
 
                 // Length
                 let length = encodeLength(bytes.size());

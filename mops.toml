@@ -9,7 +9,7 @@ name = "asn1"
 version = "0.0.1"
 description = ""
 repository = "https://github.com/edjcase/motoko_asn1"
-keywords = [ "ASN.1", "ASN1", "DER", "encode", "decode" ]
+keywords = ["ASN.1", "ASN1", "DER", "encode", "decode"]
 license = "MIT"
 
 [dev-dependencies]
