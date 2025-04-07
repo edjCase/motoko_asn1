@@ -3,7 +3,7 @@
 [![MOPS](https://img.shields.io/badge/MOPS-asn1-blue)](https://mops.one/asn1)
 [![License](https://img.shields.io/badge/license-MIT-blue.svg)](https://github.com/yourusername/motoko_asn1/blob/main/LICENSE)
 
-A Motoko implementation of ASN.1 (Abstract Syntax Notation One) encoding and decoding for the Internet Computer.
+A Motoko implementation of ASN.1 (Abstract Syntax Notation One) encoding and decoding.
 
 ## ⚠️ Partial Implementation
 
