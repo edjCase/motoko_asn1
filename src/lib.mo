@@ -7,6 +7,10 @@ import Buffer "mo:base/Buffer";
 import Array "mo:base/Array";
 import Char "mo:base/Char";
 import Result "mo:base/Result";
+import IterTools "mo:itertools/Iter";
+import PeekableIter "mo:itertools/PeekableIter";
+import Int "mo:new-base/Int";
+import IntX "mo:xtended-numbers/IntX";
 
 module {
     // ASN.1 Tag Classes
@@ -20,7 +24,7 @@ module {
     // ASN.1 Value Types
     public type ASN1Value = {
         #boolean : Bool;
-        #integer : [Nat8]; // Using Nat8 array to support arbitrary precision
+        #integer : Int;
         #bitString : {
             unusedBits : Nat8;
             data : [Nat8];
@@ -36,18 +40,22 @@ module {
         #sequence : [ASN1Value];
         #set : [ASN1Value];
         // Context-specific types
-        #contextSpecific : {
-            tagNumber : Nat;
-            constructed : Bool;
-            value : ?ASN1Value;
-        };
+        #contextSpecific : ContextSpecificASN1Value;
         // Unknown types - store raw data
-        #unknown : {
-            tagClass : TagClass;
-            tagNumber : Nat;
-            constructed : Bool;
-            data : [Nat8];
-        };
+        #unknown : UnknownASN1Value;
+    };
+
+    public type ContextSpecificASN1Value = {
+        tagNumber : Nat;
+        constructed : Bool;
+        value : ?ASN1Value;
+    };
+
+    public type UnknownASN1Value = {
+        tagClass : TagClass;
+        tagNumber : Nat;
+        constructed : Bool;
+        data : [Nat8];
     };
 
     // Tag numbers for Universal types
@@ -65,19 +73,17 @@ module {
     let TAG_SEQUENCE : Nat = 0x10; // 0x30 with constructed bit
     let TAG_SET : Nat = 0x11; // 0x31 with constructed bit
 
-    type ParseResult<T> = Result.Result<{ value : T; rest : Iter.Iter<Nat8> }, Text>;
-
     // ===== DECODER FUNCTIONS =====
 
     // Main ASN.1 parser function
     public func decodeDER(bytes : [Nat8]) : Result.Result<ASN1Value, Text> {
         // Convert byte array to iterator
-        let byteIter = Iter.fromArray(bytes);
+        let byteIter = IterTools.peekable<Nat8>(bytes.vals());
         switch (decodeInternal(byteIter)) {
             case (#err(e)) return #err(e);
-            case (#ok({ value; rest })) {
+            case (#ok(value)) {
                 // Check if there are remaining bytes
-                if (Iter.size<Nat8>(rest) > 0) {
+                if (PeekableIter.hasNext(byteIter)) {
                     return #err("Extra data after ASN.1 value");
                 };
                 return #ok(value);
@@ -85,18 +91,18 @@ module {
         };
     };
 
-    private func decodeInternal(bytes : Iter.Iter<Nat8>) : ParseResult<ASN1Value> {
+    private func decodeInternal(bytes : PeekableIter.PeekableIter<Nat8>) : Result.Result<ASN1Value, Text> {
         // Parse tag
         let tagResult = parseTag(bytes);
         switch (tagResult) {
             case (#err(e)) return #err(e);
-            case (#ok({ value = { tagClass; tagNumber; constructed }; rest = bytes })) {
+            case (#ok({ tagClass; tagNumber; constructed })) {
 
                 // Parse length
                 let lengthResult = parseLength(bytes);
                 switch (lengthResult) {
                     case (#err(e)) return #err(e);
-                    case (#ok({ value = length; rest = bytes })) {
+                    case (#ok(length)) {
 
                         // Parse value based on tag
                         if (tagClass == #universal) {
@@ -105,83 +111,49 @@ module {
                                     let valueResult = parseBoolean(bytes, length);
                                     switch (valueResult) {
                                         case (#err(e)) return #err(e);
-                                        case (#ok({ value; rest })) {
-                                            return #ok({
-                                                value = #boolean(value);
-                                                rest;
-                                            });
-                                        };
+                                        case (#ok(value)) return #ok(#boolean(value));
                                     };
                                 };
                                 case (0x02) {
                                     let valueResult = parseInteger(bytes, length);
                                     switch (valueResult) {
                                         case (#err(e)) return #err(e);
-                                        case (#ok({ value; rest })) {
-                                            return #ok({
-                                                value = #integer(value);
-                                                rest;
-                                            });
-                                        };
+                                        case (#ok(value)) return #ok(#integer(value));
                                     };
                                 };
                                 case (0x03) {
                                     let valueResult = parseBitString(bytes, length);
                                     switch (valueResult) {
                                         case (#err(e)) return #err(e);
-                                        case (#ok({ value; rest })) {
-                                            return #ok({
-                                                value = #bitString(value);
-                                                rest;
-                                            });
-                                        };
+                                        case (#ok(value)) return #ok(#bitString(value));
                                     };
                                 };
                                 case (0x04) {
                                     let valueResult = parseOctetString(bytes, length);
                                     switch (valueResult) {
                                         case (#err(e)) return #err(e);
-                                        case (#ok({ value; rest })) {
-                                            return #ok({
-                                                value = #octetString(value);
-                                                rest;
-                                            });
-                                        };
+                                        case (#ok(value)) return #ok(#octetString(value));
                                     };
                                 };
                                 case (0x05) {
-                                    let valueResult = parseNull(bytes, length);
-                                    switch (valueResult) {
-                                        case (#err(e)) return #err(e);
-                                        case (#ok({ value = _; rest })) {
-                                            return #ok({
-                                                value = #null_;
-                                                rest;
-                                            });
-                                        };
+                                    if (length != 0) {
+                                        return #err("Invalid length for NULL value");
                                     };
+                                    return #ok(#null_);
                                 };
                                 case (0x06) {
                                     let valueResult = parseObjectIdentifier(bytes, length);
                                     switch (valueResult) {
                                         case (#err(e)) return #err(e);
-                                        case (#ok({ value; rest })) {
-                                            return #ok({
-                                                value = #objectIdentifier(value);
-                                                rest;
-                                            });
-                                        };
+                                        case (#ok(value)) return #ok(#objectIdentifier(value));
                                     };
                                 };
                                 case (0x0C) {
                                     let valueResult = parseString(bytes, length);
                                     switch (valueResult) {
                                         case (#err(e)) return #err(e);
-                                        case (#ok({ value; rest })) {
-                                            return #ok({
-                                                value = #utf8String(value);
-                                                rest;
-                                            });
+                                        case (#ok(value)) {
+                                            return #ok(#utf8String(value));
                                         };
                                     };
                                 };
@@ -189,11 +161,8 @@ module {
                                     let valueResult = parseString(bytes, length);
                                     switch (valueResult) {
                                         case (#err(e)) return #err(e);
-                                        case (#ok({ value; rest })) {
-                                            return #ok({
-                                                value = #printableString(value);
-                                                rest;
-                                            });
+                                        case (#ok(value)) {
+                                            return #ok(#printableString(value));
                                         };
                                     };
                                 };
@@ -201,11 +170,8 @@ module {
                                     let valueResult = parseString(bytes, length);
                                     switch (valueResult) {
                                         case (#err(e)) return #err(e);
-                                        case (#ok({ value; rest })) {
-                                            return #ok({
-                                                value = #ia5String(value);
-                                                rest;
-                                            });
+                                        case (#ok(value)) {
+                                            return #ok(#ia5String(value));
                                         };
                                     };
                                 };
@@ -214,11 +180,8 @@ module {
                                     let valueResult = parseString(bytes, length); // UTCTime is encoded like a string
                                     switch (valueResult) {
                                         case (#err(e)) return #err(e);
-                                        case (#ok({ value; rest })) {
-                                            return #ok({
-                                                value = #utctime(value);
-                                                rest;
-                                            });
+                                        case (#ok(value)) {
+                                            return #ok(#utctime(value));
                                         };
                                     };
                                 };
@@ -227,11 +190,8 @@ module {
                                     let valueResult = parseString(bytes, length); // Also encoded like a string
                                     switch (valueResult) {
                                         case (#err(e)) return #err(e);
-                                        case (#ok({ value; rest })) {
-                                            return #ok({
-                                                value = #generalizedTime(value);
-                                                rest;
-                                            });
+                                        case (#ok(value)) {
+                                            return #ok(#generalizedTime(value));
                                         };
                                     };
                                 };
@@ -244,26 +204,21 @@ module {
                                     let contentResult = readBytes(bytes, length);
                                     switch (contentResult) {
                                         case (#err(e)) return #err(e);
-                                        case (#ok({ value = contentBytes; rest })) {
+                                        case (#ok(contentBytes)) {
                                             // Parse sequence elements
                                             let elements = Buffer.Buffer<ASN1Value>(8);
-                                            var contentIter = contentBytes.vals();
-
-                                            while (Iter.size<Nat8>(contentIter) > 0) {
+                                            var contentIter = PeekableIter.fromIter(contentBytes.vals());
+                                            while (PeekableIter.hasNext(contentIter)) {
                                                 let elementResult = decodeInternal(contentIter);
                                                 switch (elementResult) {
                                                     case (#err(e)) return #err(e);
-                                                    case (#ok({ value; rest = nextIter })) {
+                                                    case (#ok(value)) {
                                                         elements.add(value);
-                                                        contentIter := nextIter;
                                                     };
                                                 };
                                             };
 
-                                            return #ok({
-                                                value = #sequence(Buffer.toArray(elements));
-                                                rest;
-                                            });
+                                            return #ok(#sequence(Buffer.toArray(elements)));
                                         };
                                     };
                                 };
@@ -276,26 +231,22 @@ module {
                                     let contentResult = readBytes(bytes, length);
                                     switch (contentResult) {
                                         case (#err(e)) return #err(e);
-                                        case (#ok({ value = contentBytes; rest })) {
+                                        case (#ok(contentBytes)) {
                                             // Parse set elements
                                             let elements = Buffer.Buffer<ASN1Value>(8);
-                                            var contentIter = contentBytes.vals();
+                                            var contentIter = PeekableIter.fromIter(contentBytes.vals());
 
-                                            while (Iter.size<Nat8>(contentIter) > 0) {
+                                            while (PeekableIter.hasNext(contentIter)) {
                                                 let elementResult = decodeInternal(contentIter);
                                                 switch (elementResult) {
                                                     case (#err(e)) return #err(e);
-                                                    case (#ok({ value; rest = nextIter })) {
+                                                    case (#ok(value)) {
                                                         elements.add(value);
-                                                        contentIter := nextIter;
                                                     };
                                                 };
                                             };
 
-                                            return #ok({
-                                                value = #set(Buffer.toArray(elements));
-                                                rest;
-                                            });
+                                            return #ok(#set(Buffer.toArray(elements)));
                                         };
                                     };
                                 };
@@ -304,16 +255,8 @@ module {
                                     let contentResult = readBytes(bytes, length);
                                     switch (contentResult) {
                                         case (#err(e)) return #err(e);
-                                        case (#ok({ value = data; rest })) {
-                                            return #ok({
-                                                value = #unknown({
-                                                    tagClass;
-                                                    tagNumber;
-                                                    constructed;
-                                                    data;
-                                                });
-                                                rest;
-                                            });
+                                        case (#ok(data)) {
+                                            return #ok(#unknown({ tagClass; tagNumber; constructed; data }));
                                         };
                                     };
                                 };
@@ -324,34 +267,20 @@ module {
                                 let contentResult = readBytes(bytes, length);
                                 switch (contentResult) {
                                     case (#err(e)) return #err(e);
-                                    case (#ok({ value = contentBytes; rest })) {
+                                    case (#ok(contentBytes)) {
                                         if (contentBytes.size() > 0) {
-                                            let contentIter = contentBytes.vals();
+                                            let contentIter = PeekableIter.fromIter(contentBytes.vals());
                                             let innerResult = decodeInternal(contentIter);
 
                                             switch (innerResult) {
                                                 case (#err(e)) return #err(e);
-                                                case (#ok({ value; rest = _ })) {
-                                                    return #ok({
-                                                        value = #contextSpecific({
-                                                            tagNumber;
-                                                            constructed;
-                                                            value = ?value;
-                                                        });
-                                                        rest;
-                                                    });
+                                                case (#ok(value)) {
+                                                    return #ok(#contextSpecific({ tagNumber; constructed; value = ?value }));
                                                 };
                                             };
                                         } else {
                                             // Empty constructed context-specific value
-                                            return #ok({
-                                                value = #contextSpecific({
-                                                    tagNumber;
-                                                    constructed;
-                                                    value = null;
-                                                });
-                                                rest;
-                                            });
+                                            return #ok(#contextSpecific({ tagNumber; constructed; value = null }));
                                         };
                                     };
                                 };
@@ -360,15 +289,8 @@ module {
                                 let contentResult = readBytes(bytes, length);
                                 switch (contentResult) {
                                     case (#err(e)) return #err(e);
-                                    case (#ok({ rest })) {
-                                        return #ok({
-                                            value = #contextSpecific({
-                                                tagNumber;
-                                                constructed;
-                                                value = null;
-                                            });
-                                            rest;
-                                        });
+                                    case (#ok(bytes)) {
+                                        return #ok(#unknown({ tagClass = #contextSpecific; tagNumber = tagNumber; constructed = false; data = bytes }));
                                     };
                                 };
                             };
@@ -377,16 +299,8 @@ module {
                             let contentResult = readBytes(bytes, length);
                             switch (contentResult) {
                                 case (#err(e)) return #err(e);
-                                case (#ok({ value = data; rest })) {
-                                    return #ok({
-                                        value = #unknown({
-                                            tagClass;
-                                            tagNumber;
-                                            constructed;
-                                            data;
-                                        });
-                                        rest;
-                                    });
+                                case (#ok(data)) {
+                                    return #ok(#unknown({ tagClass; tagNumber; constructed; data }));
                                 };
                             };
                         };
@@ -400,7 +314,7 @@ module {
     };
 
     // Parse ASN.1 DER tag byte
-    private func parseTag(bytes : Iter.Iter<Nat8>) : ParseResult<{ tagClass : TagClass; tagNumber : Nat; constructed : Bool }> {
+    private func parseTag(bytes : Iter.Iter<Nat8>) : Result.Result<{ tagClass : TagClass; tagNumber : Nat; constructed : Bool }, Text> {
         let ?tagByte = bytes.next() else return #err("Unexpected end of data while parsing tag");
 
         let tagClass = switch (tagByte >> 6) {
@@ -427,35 +341,26 @@ module {
             };
 
             return #ok({
-                value = {
-                    tagClass;
-                    tagNumber = result;
-                    constructed;
-                };
-                rest = bytes;
+                tagClass;
+                tagNumber = result;
+                constructed;
             });
         };
 
         #ok({
-            value = {
-                tagClass;
-                tagNumber;
-                constructed;
-            };
-            rest = bytes;
+            tagClass;
+            tagNumber;
+            constructed;
         });
     };
 
     // Parse ASN.1 DER length
-    private func parseLength(bytes : Iter.Iter<Nat8>) : ParseResult<Nat> {
+    private func parseLength(bytes : Iter.Iter<Nat8>) : Result.Result<Nat, Text> {
         let ?firstByte = bytes.next() else return #err("Unexpected end of data while parsing length");
 
         if (firstByte < 0x80) {
             // Short form
-            return #ok({
-                value = Nat8.toNat(firstByte);
-                rest = bytes;
-            });
+            return #ok(Nat8.toNat(firstByte));
         };
 
         // Long form
@@ -472,14 +377,11 @@ module {
             i += 1;
         };
 
-        #ok({
-            value = length;
-            rest = bytes;
-        });
+        #ok(length);
     };
 
     // Read a specific number of bytes from an iterator
-    private func readBytes(bytes : Iter.Iter<Nat8>, count : Nat) : ParseResult<[Nat8]> {
+    private func readBytes(bytes : Iter.Iter<Nat8>, count : Nat) : Result.Result<[Nat8], Text> {
         let buffer = Buffer.Buffer<Nat8>(count);
         var i = 0;
         while (i < count) {
@@ -488,37 +390,38 @@ module {
             i += 1;
         };
 
-        #ok({
-            value = Buffer.toArray(buffer);
-            rest = bytes;
-        });
+        #ok(Buffer.toArray(buffer));
     };
 
     // Parse a BOOLEAN value
-    private func parseBoolean(bytes : Iter.Iter<Nat8>, length : Nat) : ParseResult<Bool> {
+    private func parseBoolean(bytes : Iter.Iter<Nat8>, length : Nat) : Result.Result<Bool, Text> {
         if (length != 1) {
             return #err("Invalid length for BOOLEAN value");
         };
 
         let ?value = bytes.next() else return #err("Unexpected end of data while parsing BOOLEAN");
 
-        #ok({
-            value = value != 0;
-            rest = bytes;
-        });
+        #ok(value != 0);
     };
 
     // Parse an INTEGER value
-    private func parseInteger(bytes : Iter.Iter<Nat8>, length : Nat) : ParseResult<[Nat8]> {
+    private func parseInteger(bytes : Iter.Iter<Nat8>, length : Nat) : Result.Result<Int, Text> {
         if (length == 0) {
             return #err("Invalid length for INTEGER value");
         };
 
-        readBytes(bytes, length);
+        let byteResult = readBytes(bytes, length);
+        switch (byteResult) {
+            case (#err(e)) return #err(e);
+            case (#ok(b)) switch (IntX.decodeInt(b.vals(), #msb)) {
+                case (null) return #err("Invalid INTEGER value");
+                case (?intValue) return #ok(intValue);
+            };
+        };
     };
 
     // Parse a BIT_string value
-    private func parseBitString(bytes : Iter.Iter<Nat8>, length : Nat) : ParseResult<{ unusedBits : Nat8; data : [Nat8] }> {
+    private func parseBitString(bytes : Iter.Iter<Nat8>, length : Nat) : Result.Result<{ unusedBits : Nat8; data : [Nat8] }, Text> {
         if (length == 0) {
             return #err("Invalid length for BIT_string value");
         };
@@ -531,37 +434,22 @@ module {
         let byteResult = readBytes(bytes, length - 1);
         switch (byteResult) {
             case (#err(e)) return #err(e);
-            case (#ok({ value; rest })) {
+            case (#ok(value)) {
                 #ok({
-                    value = {
-                        unusedBits;
-                        data = value;
-                    };
-                    rest;
+                    unusedBits;
+                    data = value;
                 });
             };
         };
     };
 
     // Parse an OCTET_string value
-    private func parseOctetString(bytes : Iter.Iter<Nat8>, length : Nat) : ParseResult<[Nat8]> {
+    private func parseOctetString(bytes : Iter.Iter<Nat8>, length : Nat) : Result.Result<[Nat8], Text> {
         readBytes(bytes, length);
     };
 
-    // Parse a NULL value
-    private func parseNull(bytes : Iter.Iter<Nat8>, length : Nat) : ParseResult<()> {
-        if (length != 0) {
-            return #err("Invalid length for NULL value");
-        };
-
-        #ok({
-            value = ();
-            rest = bytes;
-        });
-    };
-
     // Parse an OBJECT_identifier value
-    private func parseObjectIdentifier(bytes : Iter.Iter<Nat8>, length : Nat) : ParseResult<Text> {
+    private func parseObjectIdentifier(bytes : Iter.Iter<Nat8>, length : Nat) : Result.Result<Text, Text> {
         if (length == 0) {
             return #err("Invalid length for OBJECT_identifier value");
         };
@@ -569,7 +457,7 @@ module {
         let byteResult = readBytes(bytes, length);
         switch (byteResult) {
             case (#err(e)) return #err(e);
-            case (#ok({ value = oidBytes; rest })) {
+            case (#ok(oidBytes)) {
                 // Process OID bytes
                 let components = Buffer.Buffer<Text>(8);
 
@@ -598,20 +486,17 @@ module {
                     i += 1;
                 };
 
-                #ok({
-                    value = Text.join(".", components.vals());
-                    rest;
-                });
+                #ok(Text.join(".", components.vals()));
             };
         };
     };
 
     // Parse string types (UTF8String, PrintableString, IA5String)
-    private func parseString(bytes : Iter.Iter<Nat8>, length : Nat) : ParseResult<Text> {
+    private func parseString(bytes : Iter.Iter<Nat8>, length : Nat) : Result.Result<Text, Text> {
         let byteResult = readBytes(bytes, length);
         switch (byteResult) {
             case (#err(e)) return #err(e);
-            case (#ok({ value; rest })) {
+            case (#ok(value)) {
                 // Simple ASCII conversion for now
                 // A full implementation would need proper UTF-8 decoding
                 let chars = Array.map<Nat8, Char>(
@@ -621,10 +506,7 @@ module {
                     },
                 );
 
-                #ok({
-                    value = Text.fromIter(chars.vals());
-                    rest;
-                });
+                #ok(Text.fromIter(chars.vals()));
             };
         };
     };
@@ -652,12 +534,15 @@ module {
                 let tag = encodeTag(#universal, false, TAG_INTEGER);
                 for (b in tag.vals()) encoded.add(b);
 
+                let valueBuffer = Buffer.Buffer<Nat8>(64);
+                IntX.encodeInt(valueBuffer, intValue, #msb);
+
                 // Length
-                let length = encodeLength(intValue.size());
+                let length = encodeLength(valueBuffer.size());
                 for (b in length.vals()) encoded.add(b);
 
                 // Value
-                for (b in intValue.vals()) encoded.add(b);
+                encoded.append(valueBuffer);
             };
             case (#bitString({ unusedBits; data })) {
                 // Tag
@@ -1126,7 +1011,7 @@ module {
                 indentStr # "BOOLEAN: " # (if (boolValue) "TRUE" else "FALSE");
             };
             case (#integer(intValue)) {
-                indentStr # "INTEGER: " # bytesToHex(intValue);
+                indentStr # "INTEGER: " # Int.toText(intValue);
             };
             case (#bitString({ unusedBits; data })) {
                 indentStr # "BIT STRING: [" # Nat8.toText(unusedBits) # " unused bits] " # bytesToHex(data);
@@ -1195,7 +1080,7 @@ module {
                     switch (tagClass) {
                         case (#universal) "UNIVERSAL";
                         case (#application) "APPLICATION";
-                        case (#contextSpecific) "CONTEXT_specific";
+                        case (#contextSpecific) "CONTEXT_SPECIFIC";
                         case (#private_) "PRIVATE";
                     }
                 ) # " " # Nat.toText(tagNumber) # "] " #

@@ -1,6 +1,8 @@
 [dependencies]
 base = "0.14.6"
 new-base = "0.3.0"
+itertools = "0.2.2"
+xtended-numbers = "0.4.0"
 
 [package]
 name = "asn1"
