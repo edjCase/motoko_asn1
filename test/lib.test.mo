@@ -145,18 +145,18 @@ test(
         expectedText = ?"GeneralizedTime: 20230101120000Z";
       },
       {
-        name = "Bit String (3 unused bits)"; // 10110... -> B? -> [0xB0]
-        derBytes = "\03\02\03\B0"; // Length 2 = 1 unused + 1 data byte
-        expectedValue = ?#bitString({ unusedBits = 3; data = [0xB0] });
+        name = "Bit String 1";
+        derBytes = "\03\02\03\B0";
+        expectedValue = ?#bitString([true, false, true, true, false]);
         expectedError = null;
-        expectedText = ?"BIT STRING: [3 unused bits] B0";
+        expectedText = ?"BIT STRING: 10110";
       },
       {
-        name = "Bit String (0 unused bits)"; // 11110000 -> F0 -> [0xF0]
+        name = "Bit String 2";
         derBytes = "\03\02\00\F0";
-        expectedValue = ?#bitString({ unusedBits = 0; data = [0xF0] });
+        expectedValue = ?#bitString([true, true, true, true, false, false, false, false]);
         expectedError = null;
-        expectedText = ?"BIT STRING: [0 unused bits] F0";
+        expectedText = ?"BIT STRING: 11110000";
       },
 
       // --- Constructed Types ---
