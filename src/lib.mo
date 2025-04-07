@@ -28,7 +28,7 @@ module {
         #bitString : [Bool];
         #octetString : [Nat8];
         #null_;
-        #objectIdentifier : Text; // Dot-notation string (e.g. "1.2.840.113549.1.1.1")
+        #objectIdentifier : [Nat];
         #utf8String : Text;
         #printableString : Text;
         #ia5String : Text;
@@ -471,7 +471,7 @@ module {
     };
 
     // Parse an OBJECT_identifier value
-    private func parseObjectIdentifier(bytes : Iter.Iter<Nat8>, length : Nat) : Result.Result<Text, Text> {
+    private func parseObjectIdentifier(bytes : Iter.Iter<Nat8>, length : Nat) : Result.Result<[Nat], Text> {
         if (length == 0) {
             return #err("Invalid length for OBJECT_identifier value");
         };
@@ -481,7 +481,7 @@ module {
             case (#err(e)) return #err(e);
             case (#ok(oidBytes)) {
                 // Process OID bytes
-                let components = Buffer.Buffer<Text>(8);
+                let components = Buffer.Buffer<Nat>(8);
 
                 // First byte encodes the first two components
                 if (oidBytes.size() == 0) {
@@ -489,8 +489,8 @@ module {
                 };
 
                 let first = oidBytes[0];
-                components.add(Nat.toText(Nat8.toNat(first) / 40));
-                components.add(Nat.toText(Nat8.toNat(first) % 40));
+                components.add(Nat8.toNat(first) / 40);
+                components.add(Nat8.toNat(first) % 40);
 
                 var value : Nat = 0;
                 var i = 1;
@@ -502,13 +502,13 @@ module {
                     } else {
                         // Last byte of this component
                         value := value * 128 + Nat8.toNat(byte);
-                        components.add(Nat.toText(value));
+                        components.add(value);
                         value := 0;
                     };
                     i += 1;
                 };
 
-                #ok(Text.join(".", components.vals()));
+                #ok(Buffer.toArray(components));
             };
         };
     };
@@ -953,16 +953,14 @@ module {
     };
 
     // Encode an OBJECT_identifier
-    private func encodeObjectIdentifier(oid : Text) : Result.Result<[Nat8], Text> {
-        let components = Iter.toArray(Text.split(oid, #char('.')));
-
-        if (components.size() < 2) {
+    private func encodeObjectIdentifier(oid : [Nat]) : Result.Result<[Nat8], Text> {
+        if (oid.size() < 2) {
             return #err("OID must have at least 2 components");
         };
 
-        // Parse first two components
-        let ?first = Nat.fromText(components[0]) else return #err("Invalid OID component: " # components[0]);
-        let ?second = Nat.fromText(components[1]) else return #err("Invalid OID component: " # components[1]);
+        // Validate first two components
+        let first = oid[0];
+        let second = oid[1];
 
         if (first > 2) {
             return #err("First OID component must be 0, 1, or 2");
@@ -972,14 +970,14 @@ module {
             return #err("Second OID component must be < 40 when first component is 0 or 1");
         };
 
-        let encoded = Buffer.Buffer<Nat8>(components.size() * 2); // Reasonable estimate
+        let encoded = Buffer.Buffer<Nat8>(oid.size() * 2); // Reasonable estimate
 
         // Encode first two components into a single byte
         encoded.add(Nat8.fromNat(first * 40 + second));
 
         // Encode remaining components
-        for (i in Iter.range(2, components.size() - 1)) {
-            let ?value = Nat.fromText(components[i]) else return #err("Invalid OID component: " # components[i]);
+        for (i in Iter.range(2, oid.size() - 1)) {
+            let value = oid[i];
 
             if (value < 128) {
                 // Single byte encoding
@@ -1080,7 +1078,10 @@ module {
                 indentStr # "NULL";
             };
             case (#objectIdentifier(oid)) {
-                indentStr # "OBJECT IDENTIFIER: " # oid;
+                let oidText = oid.vals()
+                |> Iter.map(_, func(n : Nat) : Text = Nat.toText(n))
+                |> Text.join(".", _);
+                indentStr # "OBJECT IDENTIFIER: " # oidText;
             };
             case (#utf8String(str)) {
                 indentStr # "UTF8String: " # str;

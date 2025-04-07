@@ -98,14 +98,14 @@ test(
       {
         name = "Object Identifier (RSA Encryption)"; // 1.2.840.113549.1.1.1
         derBytes = "\06\09\2A\86\48\86\F7\0D\01\01\01";
-        expectedValue = ?#objectIdentifier("1.2.840.113549.1.1.1");
+        expectedValue = ?#objectIdentifier([1, 2, 840, 113549, 1, 1, 1]);
         expectedError = null;
         expectedText = ?"OBJECT IDENTIFIER: 1.2.840.113549.1.1.1";
       },
       {
         name = "Object Identifier (id-Ed25519)"; // 1.3.101.112
         derBytes = "\06\03\2B\65\70";
-        expectedValue = ?#objectIdentifier("1.3.101.112");
+        expectedValue = ?#objectIdentifier([1, 3, 101, 112]);
         expectedError = null;
         expectedText = ?"OBJECT IDENTIFIER: 1.3.101.112";
       },
@@ -610,7 +610,7 @@ test(
       {
         name = "Object Identifier (Short 1.2)"; // Re-checked, should be success
         derBytes = "\06\01\2A"; // 1*40 + 2 = 42 = 0x2A
-        expectedValue = ?#objectIdentifier("1.2");
+        expectedValue = ?#objectIdentifier([1, 2]);
         expectedError = null;
         expectedText = ?"OBJECT IDENTIFIER: 1.2";
       },
@@ -619,7 +619,7 @@ test(
         derBytes = "\06\03\2B\80\00"; // Tries to encode 1.3.0 as 1.3.<0x80 0x00> which is non-minimal DER
         // Current parser likely accepts this and parses as "1.3.0"
         // A strict DER validator would reject this. Adjusting expectation to match current code.
-        expectedValue = ?#objectIdentifier("1.3.0");
+        expectedValue = ?#objectIdentifier([1, 3, 0]);
         expectedError = null; // Expect parser to succeed, even if non-minimal DER
         expectedText = ?"OBJECT IDENTIFIER: 1.3.0";
       },
@@ -727,14 +727,14 @@ test(
       {
         name = "Large OID Value"; // OID with component > 127
         derBytes = "\06\06\2B\06\81\83\51\01"; // 1.3.6.16849.1
-        expectedValue = ?#objectIdentifier("1.3.6.16849.1");
+        expectedValue = ?#objectIdentifier([1, 3, 6, 16849, 1]);
         expectedError = null;
         expectedText = ?"OBJECT IDENTIFIER: 1.3.6.16849.1";
       },
       {
         name = "Very Large OID Value"; // OID with component > 16383
-        derBytes = "\06\07\2B\06\82\84\D5\7A\01"; // 1.3.6.66618.1
-        expectedValue = ?#objectIdentifier("1.3.6.4270842.1");
+        derBytes = "\06\07\2B\06\82\84\D5\7A\01"; // 1.3.6.4270842.1
+        expectedValue = ?#objectIdentifier([1, 3, 6, 4270842, 1]);
         expectedError = null;
         expectedText = ?"OBJECT IDENTIFIER: 1.3.6.4270842.1";
       },
