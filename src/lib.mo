@@ -26,7 +26,7 @@ module {
     public type ASN1Value = {
         #boolean : Bool;
         #integer : Int;
-        #bitString : [Bool];
+        #bitString : BitString;
         #octetString : [Nat8];
         #null_;
         #objectIdentifier : [Nat];
@@ -41,6 +41,12 @@ module {
         #contextSpecific : ContextSpecificASN1Value;
         // Unknown types - store raw data
         #unknown : UnknownASN1Value;
+    };
+
+    public type BitString = {
+        data : [Nat8];
+        // Number of unused bits in the last byte (0-7)
+        unusedBits : Nat8;
     };
 
     public type ContextSpecificASN1Value = {
@@ -419,7 +425,7 @@ module {
     };
 
     // Parse a BIT_string value
-    private func parseBitString(bytes : Iter.Iter<Nat8>, length : Nat) : Result.Result<[Bool], Text> {
+    private func parseBitString(bytes : Iter.Iter<Nat8>, length : Nat) : Result.Result<BitString, Text> {
         if (length == 0) {
             return #err("Invalid length for BIT_string value");
         };
@@ -432,38 +438,13 @@ module {
 
         // Read the data bytes
         let byteResult = readBytes(bytes, length - 1);
-        let data = switch (byteResult) {
+        switch (byteResult) {
             case (#err(e)) return #err(e);
-            case (#ok(data)) data;
+            case (#ok(data)) #ok({
+                unusedBits;
+                data = data;
+            });
         };
-        // Create a buffer to hold the bits
-        let bits = Buffer.Buffer<Bool>(data.size() * 8);
-
-        // Process each byte
-        var i = 0;
-        while (i < data.size()) {
-            let byte = data[i];
-            let isLastByte = i == (data.size() - 1 : Nat);
-
-            // Process each bit in the byte
-            var j = 0;
-            label w while (j < 8) {
-                // Skip unused bits in the last byte
-                if (isLastByte and j >= (8 - Nat8.toNat(unusedBits) : Nat)) {
-                    break w;
-                };
-
-                // Test if bit is set (from most significant to least significant)
-                let bitSet = (byte & (1 << Nat8.fromNat(7 - j))) != 0;
-                bits.add(bitSet);
-
-                j += 1;
-            };
-
-            i += 1;
-        };
-
-        #ok(Buffer.toArray(bits));
     };
 
     // Parse an OCTET_string value
@@ -559,47 +540,17 @@ module {
                 // Value
                 encoded.append(valueBuffer);
             };
-            case (#bitString(bits)) {
+            case (#bitString({ unusedBits; data })) {
                 // Tag
                 let tag = encodeTag(#universal, false, TAG_BIT_STRING);
                 for (b in tag.vals()) encoded.add(b);
 
-                // Calculate bytes needed and unused bits
-                let totalBits = bits.size();
-                let completeBytes = totalBits / 8;
-                let remainingBits = totalBits % 8;
-                let totalBytes = if (remainingBits == 0) completeBytes else completeBytes + 1;
-                let unusedBits : Nat8 = if (remainingBits == 0) 0 else Nat8.fromNat(8 - remainingBits);
-
-                // Length (data bytes + 1 for unused bits byte)
-                let length = encodeLength(totalBytes + 1);
-                for (b in length.vals()) encoded.add(b);
-
+                // Length (data length + 1 for unused bits byte)
+                let length = encodeLength(data.size() + 1);
                 // Add unused bits byte
                 encoded.add(unusedBits);
 
-                // Pack bits into bytes
-                var byteValue : Nat8 = 0;
-                var bitIndex : Nat8 = 0;
-
-                for (bit in bits.vals()) {
-                    if (bit) {
-                        byteValue := byteValue | (1 << (7 - (bitIndex % 8)));
-                    };
-
-                    bitIndex += 1;
-
-                    // When we've filled a byte, add it to the output
-                    if (bitIndex % 8 == 0) {
-                        encoded.add(byteValue);
-                        byteValue := 0;
-                    };
-                };
-
-                // Add final partial byte if needed
-                if (remainingBits > 0) {
-                    encoded.add(byteValue);
-                };
+                for (b in data.vals()) encoded.add(b);
             };
             case (#octetString(data)) {
                 // Tag
@@ -1047,14 +998,8 @@ module {
             case (#integer(intValue)) {
                 indentStr # "INTEGER: " # Int.toText(intValue);
             };
-            case (#bitString(bits)) {
-                let bitText = bits.vals()
-                |> Iter.map(
-                    _,
-                    func(b : Bool) : Text = if (b) "1" else "0",
-                )
-                |> Text.join("", _);
-                indentStr # "BIT STRING: " # bitText;
+            case (#bitString({ unusedBits; data })) {
+                indentStr # "BIT STRING: [" # Nat8.toText(unusedBits) # " unused bits] " # bytesToHex(data);
             };
             case (#octetString(data)) {
                 indentStr # "OCTET STRING: " # bytesToHex(data);
