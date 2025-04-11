@@ -1,7 +1,6 @@
 import Text "mo:base/Text";
 import Nat8 "mo:base/Nat8";
 import Nat "mo:base/Nat";
-import Nat32 "mo:base/Nat32";
 import Iter "mo:base/Iter";
 import Buffer "mo:base/Buffer";
 import Array "mo:base/Array";
@@ -511,206 +510,174 @@ module {
 
     // Encode an ASN.1 value to DER
     public func encodeDER(value : ASN1Value) : [Nat8] {
-        let encoded = Buffer.Buffer<Nat8>(64); // Initial size estimate
+        let buffer = Buffer.Buffer<Nat8>(64);
+        encodeDERToBuffer((buffer, value));
+        return Buffer.toArray(buffer);
+    };
 
+    public func encodeDERToBuffer((buffer : Buffer.Buffer<Nat8>, value : ASN1Value)) {
         switch (value) {
             case (#boolean(boolValue)) {
                 // Tag
-                let tag = encodeTag(#universal, false, TAG_BOOLEAN);
-                for (b in tag.vals()) encoded.add(b);
+                encodeTag(buffer, #universal, false, TAG_BOOLEAN);
 
                 // Length (always 1)
-                encoded.add(0x01);
+                buffer.add(0x01);
 
                 // Value
-                encoded.add(if (boolValue) 0xFF else 0x00);
+                buffer.add(if (boolValue) 0xFF else 0x00);
             };
             case (#integer(intValue)) {
                 // Tag
-                let tag = encodeTag(#universal, false, TAG_INTEGER);
-                for (b in tag.vals()) encoded.add(b);
+                encodeTag(buffer, #universal, false, TAG_INTEGER);
 
-                let valueBuffer = Buffer.Buffer<Nat8>(64);
-                IntX.encodeInt(valueBuffer, intValue, #msb);
+                // Encode the integer value
+                let tmpBuffer = Buffer.Buffer<Nat8>(64);
+                IntX.encodeInt(tmpBuffer, intValue, #msb);
 
                 // Length
-                let length = encodeLength(valueBuffer.size());
-                for (b in length.vals()) encoded.add(b);
+                encodeLength(buffer, tmpBuffer.size());
 
                 // Value
-                encoded.append(valueBuffer);
+                for (b in tmpBuffer.vals()) buffer.add(b);
             };
             case (#bitString({ unusedBits; data })) {
                 // Tag
-                let tag = encodeTag(#universal, false, TAG_BIT_STRING);
-                for (b in tag.vals()) encoded.add(b);
+                encodeTag(buffer, #universal, false, TAG_BIT_STRING);
 
                 // Length (data length + 1 for unused bits byte)
-                let length = encodeLength(data.size() + 1);
-                for (b in length.vals()) encoded.add(b);
-                // Add unused bits byte
-                encoded.add(unusedBits);
+                encodeLength(buffer, data.size() + 1);
 
-                for (b in data.vals()) encoded.add(b);
+                // Add unused bits byte
+                buffer.add(unusedBits);
+
+                for (b in data.vals()) buffer.add(b);
             };
             case (#octetString(data)) {
                 // Tag
-                let tag = encodeTag(#universal, false, TAG_OCTET_STRING);
-                for (b in tag.vals()) encoded.add(b);
+                encodeTag(buffer, #universal, false, TAG_OCTET_STRING);
 
                 // Length
-                let length = encodeLength(data.size());
-                for (b in length.vals()) encoded.add(b);
+                encodeLength(buffer, data.size());
 
                 // Value
-                for (b in data.vals()) encoded.add(b);
+                for (b in data.vals()) buffer.add(b);
             };
             case (#null_) {
                 // Tag
-                let tag = encodeTag(#universal, false, TAG_NULL);
-                for (b in tag.vals()) encoded.add(b);
+                encodeTag(buffer, #universal, false, TAG_NULL);
 
                 // Length (always 0)
-                encoded.add(0x00);
+                buffer.add(0x00);
 
                 // No value
             };
             case (#objectIdentifier(oid)) {
                 // Tag
-                let tag = encodeTag(#universal, false, TAG_OBJECT_ID);
-                for (b in tag.vals()) encoded.add(b);
+                encodeTag(buffer, #universal, false, TAG_OBJECT_ID);
 
-                // Encode OID
-                let oidBytes = encodeObjectIdentifier(oid);
+                // Create a temporary buffer for the OID
+                let tmpBuffer = Buffer.Buffer<Nat8>(32);
+                encodeObjectIdentifier(tmpBuffer, oid);
+
                 // Length
-                let length = encodeLength(oidBytes.size());
-                for (b in length.vals()) encoded.add(b);
+                encodeLength(buffer, tmpBuffer.size());
 
                 // Value
-                for (b in oidBytes.vals()) encoded.add(b);
+                for (b in tmpBuffer.vals()) buffer.add(b);
             };
             case (#utf8String(str)) {
-                // Simplified: we're just encoding as ASCII here
-                // A real implementation would need proper UTF-8 encoding
-
                 // Tag
-                let tag = encodeTag(#universal, false, TAG_UTF8_STRING);
-                for (b in tag.vals()) encoded.add(b);
+                encodeTag(buffer, #universal, false, TAG_UTF8_STRING);
 
-                // Simple ASCII encoding
-                let bytes = Array.map<Char, Nat8>(
-                    Iter.toArray(Text.toIter(str)),
-                    func(c) { Nat8.fromNat(Nat32.toNat(Char.toNat32(c))) },
-                );
+                let bytes = Text.encodeUtf8(str);
 
                 // Length
-                let length = encodeLength(bytes.size());
-                for (b in length.vals()) encoded.add(b);
+                encodeLength(buffer, bytes.size());
 
                 // Value
-                for (b in bytes.vals()) encoded.add(b);
+                for (b in bytes.vals()) buffer.add(b);
             };
             case (#printableString(str)) {
                 // Tag
-                let tag = encodeTag(#universal, false, TAG_PRINTABLESTRING);
-                for (b in tag.vals()) encoded.add(b);
+                encodeTag(buffer, #universal, false, TAG_PRINTABLESTRING);
 
-                // Simple ASCII encoding
-                let bytes = Array.map<Char, Nat8>(
-                    Iter.toArray(Text.toIter(str)),
-                    func(c) { Nat8.fromNat(Nat32.toNat(Char.toNat32(c))) },
-                );
+                let bytes = Text.encodeUtf8(str);
 
                 // Length
-                let length = encodeLength(bytes.size());
-                for (b in length.vals()) encoded.add(b);
+                encodeLength(buffer, bytes.size());
 
                 // Value
-                for (b in bytes.vals()) encoded.add(b);
+                for (b in bytes.vals()) buffer.add(b);
             };
             case (#ia5String(str)) {
                 // Tag
-                let tag = encodeTag(#universal, false, TAG_IA5_STRING);
-                for (b in tag.vals()) encoded.add(b);
+                encodeTag(buffer, #universal, false, TAG_IA5_STRING);
 
-                // Simple ASCII encoding
-                let bytes = Array.map<Char, Nat8>(
-                    Iter.toArray(Text.toIter(str)),
-                    func(c) { Nat8.fromNat(Nat32.toNat(Char.toNat32(c))) },
-                );
+                let bytes = Text.encodeUtf8(str);
 
                 // Length
-                let length = encodeLength(bytes.size());
-                for (b in length.vals()) encoded.add(b);
+                encodeLength(buffer, bytes.size());
 
                 // Value
-                for (b in bytes.vals()) encoded.add(b);
+                for (b in bytes.vals()) buffer.add(b);
             };
             case (#sequence(elements)) {
-                // Encode each element first
-                let contentsBuffer = Buffer.Buffer<Nat8>(64);
+                // Encode each element first to a temporary buffer
+                let tmpBuffer = Buffer.Buffer<Nat8>(64);
 
                 for (element in elements.vals()) {
-                    let elementBytes = encodeDER(element);
-                    for (b in elementBytes.vals()) contentsBuffer.add(b);
+                    encodeDERToBuffer(tmpBuffer, element);
                 };
 
-                let contents = Buffer.toArray(contentsBuffer);
-
                 // Tag
-                let tag = encodeTag(#universal, true, TAG_SEQUENCE);
-                for (b in tag.vals()) encoded.add(b);
+                encodeTag(buffer, #universal, true, TAG_SEQUENCE);
 
                 // Length
-                let length = encodeLength(contents.size());
-                for (b in length.vals()) encoded.add(b);
+                encodeLength(buffer, tmpBuffer.size());
 
                 // Value (encoded elements)
-                for (b in contents.vals()) encoded.add(b);
+                for (b in tmpBuffer.vals()) buffer.add(b);
             };
             case (#set(elements)) {
-                // Encode each element first
-                let contentsBuffer = Buffer.Buffer<Nat8>(64);
+                // Encode each element first to a temporary buffer
+                let tmpBuffer = Buffer.Buffer<Nat8>(64);
 
                 for (element in elements.vals()) {
-                    let elementBytes = encodeDER(element);
-                    for (b in elementBytes.vals()) contentsBuffer.add(b);
+                    encodeDERToBuffer(tmpBuffer, element);
                 };
 
-                let contents = Buffer.toArray(contentsBuffer);
-
                 // Tag
-                let tag = encodeTag(#universal, true, TAG_SET);
-                for (b in tag.vals()) encoded.add(b);
+                encodeTag(buffer, #universal, true, TAG_SET);
 
                 // Length
-                let length = encodeLength(contents.size());
-                for (b in length.vals()) encoded.add(b);
+                encodeLength(buffer, tmpBuffer.size());
 
                 // Value (encoded elements)
-                for (b in contents.vals()) encoded.add(b);
+                for (b in tmpBuffer.vals()) buffer.add(b);
             };
             case (#contextSpecific({ tagNumber; constructed; value })) {
                 // Tag
-                let tag = encodeTag(#contextSpecific, constructed, tagNumber);
-                for (b in tag.vals()) encoded.add(b);
+                encodeTag(buffer, #contextSpecific, constructed, tagNumber);
 
                 switch (value) {
                     case (null) {
                         // Empty value
-                        encoded.add(0x00); // Length 0
+                        buffer.add(0x00); // Length 0
                     };
                     case (?innerValue) {
-                        // Encode inner value
-                        let innerBytes = encodeDER(innerValue);
+                        // Create a temporary buffer for the inner value
+                        let innerBuffer = Buffer.Buffer<Nat8>(32);
+                        encodeDERToBuffer(innerBuffer, innerValue);
+
                         // For constructed, we only need the value part, not the entire TLV
                         if (constructed) {
                             // Skip the first byte (tag) and extract the inner value
                             var i = 1; // Start after tag
 
                             // Skip the length bytes
-                            if (i < innerBytes.size()) {
-                                let lengthByte = innerBytes[i];
+                            if (i < innerBuffer.size()) {
+                                let lengthByte = innerBuffer.get(i);
                                 i += 1;
 
                                 if (lengthByte >= 0x80) {
@@ -720,80 +687,70 @@ module {
                             };
 
                             // Calculate content length
-                            let contentLength = if (i < innerBytes.size()) {
-                                innerBytes.size() - i : Nat;
+                            let contentLength : Nat = if (i < innerBuffer.size()) {
+                                innerBuffer.size() - i;
                             } else {
                                 0;
                             };
 
                             // Length
-                            let lengthBytes = encodeLength(contentLength);
-                            for (b in lengthBytes.vals()) encoded.add(b);
+                            encodeLength(buffer, contentLength);
 
                             // Value (just the content part)
-                            while (i < innerBytes.size()) {
-                                encoded.add(innerBytes[i]);
+                            while (i < innerBuffer.size()) {
+                                buffer.add(innerBuffer.get(i));
                                 i += 1;
                             };
                         } else {
                             // For primitive, use the entire encoding
                             // Length
-                            let length = encodeLength(innerBytes.size());
-                            for (b in length.vals()) encoded.add(b);
+                            encodeLength(buffer, innerBuffer.size());
 
                             // Value
-                            for (b in innerBytes.vals()) encoded.add(b);
+                            for (b in innerBuffer.vals()) buffer.add(b);
                         };
                     };
                 };
             };
             case (#unknown({ tagClass; tagNumber; constructed; data })) {
                 // Tag
-                let tag = encodeTag(tagClass, constructed, tagNumber);
-                for (b in tag.vals()) encoded.add(b);
+                encodeTag(buffer, tagClass, constructed, tagNumber);
 
                 // Length
-                let length = encodeLength(data.size());
-                for (b in length.vals()) encoded.add(b);
+                encodeLength(buffer, data.size());
 
                 // Value
-                for (b in data.vals()) encoded.add(b);
+                for (b in data.vals()) buffer.add(b);
             };
             case (#utctime(time)) {
                 // Tag
-                let tag = encodeTag(#universal, false, TAG_UTCTIME);
-                for (b in tag.vals()) encoded.add(b);
+                encodeTag(buffer, #universal, false, TAG_UTCTIME);
 
                 let bytes = Text.encodeUtf8(time);
 
                 // Length
-                let length = encodeLength(bytes.size());
-                for (b in length.vals()) encoded.add(b);
+                encodeLength(buffer, bytes.size());
 
                 // Value
-                for (b in bytes.vals()) encoded.add(b);
+                for (b in bytes.vals()) buffer.add(b);
             };
             case (#generalizedTime(time)) {
                 // Tag
-                let tag = encodeTag(#universal, false, TAG_GENERALIZEDTIME);
-                for (b in tag.vals()) encoded.add(b);
+                encodeTag(buffer, #universal, false, TAG_GENERALIZEDTIME);
 
                 let bytes = Text.encodeUtf8(time);
 
                 // Length
-                let length = encodeLength(bytes.size());
-                for (b in length.vals()) encoded.add(b);
+                encodeLength(buffer, bytes.size());
 
                 // Value
-                for (b in bytes.vals()) encoded.add(b);
+                for (b in bytes.vals()) buffer.add(b);
             };
         };
-
-        Buffer.toArray(encoded);
     };
 
     // Encode a tag byte
-    private func encodeTag(tagClass : TagClass, constructed : Bool, tagNumber : Nat) : [Nat8] {
+    private func encodeTag(buffer : Buffer.Buffer<Nat8>, tagClass : TagClass, constructed : Bool, tagNumber : Nat) {
         let classValue : Nat8 = switch (tagClass) {
             case (#universal) 0x00;
             case (#application) 0x40;
@@ -806,16 +763,16 @@ module {
         if (tagNumber < 31) {
             // Short form
             let tagByte : Nat8 = classValue | constructedBit | Nat8.fromNat(tagNumber);
-            return [tagByte];
+            buffer.add(tagByte);
         } else {
             // Long form
-            let tagBytes = Buffer.Buffer<Nat8>(6); // Reasonable size for most tag numbers
-
             // Initial byte
-            tagBytes.add(classValue | constructedBit | 0x1F);
+            buffer.add(classValue | constructedBit | 0x1F);
 
             // Convert the tag number to base-128 encoding with continuation bits
             var value = tagNumber;
+
+            // Create temporary array for octets in reverse order
             let octets = Buffer.Buffer<Nat8>(5);
 
             // Add the octets in reverse order first
@@ -830,24 +787,21 @@ module {
             for (i in Iter.range(0, lastIndex)) {
                 let octet = octets.get(lastIndex - i);
                 if (i < lastIndex) {
-                    tagBytes.add(0x80 | octet);
+                    buffer.add(0x80 | octet);
                 } else {
-                    tagBytes.add(octet);
+                    buffer.add(octet);
                 };
             };
-
-            Buffer.toArray(tagBytes);
         };
     };
 
     // Encode a length field
-    private func encodeLength(length : Nat) : [Nat8] {
+    private func encodeLength(buffer : Buffer.Buffer<Nat8>, length : Nat) {
         if (length < 128) {
             // Short form
-            return [Nat8.fromNat(length)];
+            buffer.add(Nat8.fromNat(length));
         } else {
             // Long form
-            let lengthBytes = Buffer.Buffer<Nat8>(5); // Can handle lengths up to 2^32-1
             var tempLength = length;
             let octets = Buffer.Buffer<Nat8>(4);
 
@@ -858,28 +812,23 @@ module {
             };
 
             // Add length of length octets
-            lengthBytes.add(0x80 | Nat8.fromNat(octets.size()));
+            buffer.add(0x80 | Nat8.fromNat(octets.size()));
 
             // Add length octets in big-endian order
             for (i in Iter.range(0, octets.size() - 1)) {
-                lengthBytes.add(octets.get(octets.size() - 1 - i));
+                buffer.add(octets.get(octets.size() - 1 - i));
             };
-
-            Buffer.toArray(lengthBytes);
         };
     };
 
     // Encode an OBJECT_identifier
-    private func encodeObjectIdentifier(oid : [Nat]) : [Nat8] {
-
+    private func encodeObjectIdentifier(buffer : Buffer.Buffer<Nat8>, oid : [Nat]) {
         // Validate first two components
         let first = oid[0];
         let second = oid[1];
 
-        let encoded = Buffer.Buffer<Nat8>(oid.size() * 2); // Reasonable estimate
-
         // Encode first two components into a single byte
-        encoded.add(Nat8.fromNat(first * 40 + second));
+        buffer.add(Nat8.fromNat(first * 40 + second));
 
         // Encode remaining components
         for (i in Iter.range(2, oid.size() - 1)) {
@@ -887,7 +836,7 @@ module {
 
             if (value < 128) {
                 // Single byte encoding
-                encoded.add(Nat8.fromNat(value));
+                buffer.add(Nat8.fromNat(value));
             } else {
                 // Multi-byte encoding
                 let octets = Buffer.Buffer<Nat8>(5); // Can handle values up to 2^35-1
@@ -905,15 +854,13 @@ module {
                 for (j in Iter.range(0, lastIndex)) {
                     let octet = octets.get(lastIndex - j);
                     if (j < lastIndex) {
-                        encoded.add(0x80 | octet);
+                        buffer.add(0x80 | octet);
                     } else {
-                        encoded.add(octet);
+                        buffer.add(octet);
                     };
                 };
             };
         };
-
-        Buffer.toArray(encoded);
     };
 
     // ===== UTILITY FUNCTIONS =====
