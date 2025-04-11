@@ -424,16 +424,16 @@ module {
         };
     };
 
-    // Parse a BIT_string value
+    // Parse a BIT_STRING value
     private func parseBitString(bytes : Iter.Iter<Nat8>, length : Nat) : Result.Result<BitString, Text> {
         if (length == 0) {
-            return #err("Invalid length for BIT_string value");
+            return #err("Invalid length for BIT_STRING value");
         };
 
         // First byte tells how many bits to ignore in the last byte
-        let ?unusedBits = bytes.next() else return #err("Unexpected end of data while parsing BIT_string");
+        let ?unusedBits = bytes.next() else return #err("Unexpected end of data while parsing BIT_STRING");
         if (unusedBits > 7) {
-            return #err("Invalid number of unused bits in BIT_string");
+            return #err("Invalid number of unused bits in BIT_STRING");
         };
 
         // Read the data bytes
@@ -510,7 +510,7 @@ module {
     // ===== ENCODER FUNCTIONS =====
 
     // Encode an ASN.1 value to DER
-    public func encodeDER(value : ASN1Value) : Result.Result<[Nat8], Text> {
+    public func encodeDER(value : ASN1Value) : [Nat8] {
         let encoded = Buffer.Buffer<Nat8>(64); // Initial size estimate
 
         switch (value) {
@@ -547,6 +547,7 @@ module {
 
                 // Length (data length + 1 for unused bits byte)
                 let length = encodeLength(data.size() + 1);
+                for (b in length.vals()) encoded.add(b);
                 // Add unused bits byte
                 encoded.add(unusedBits);
 
@@ -580,18 +581,13 @@ module {
                 for (b in tag.vals()) encoded.add(b);
 
                 // Encode OID
-                let oidResult = encodeObjectIdentifier(oid);
-                switch (oidResult) {
-                    case (#err(e)) return #err(e);
-                    case (#ok(oidBytes)) {
-                        // Length
-                        let length = encodeLength(oidBytes.size());
-                        for (b in length.vals()) encoded.add(b);
+                let oidBytes = encodeObjectIdentifier(oid);
+                // Length
+                let length = encodeLength(oidBytes.size());
+                for (b in length.vals()) encoded.add(b);
 
-                        // Value
-                        for (b in oidBytes.vals()) encoded.add(b);
-                    };
-                };
+                // Value
+                for (b in oidBytes.vals()) encoded.add(b);
             };
             case (#utf8String(str)) {
                 // Simplified: we're just encoding as ASCII here
@@ -655,13 +651,8 @@ module {
                 let contentsBuffer = Buffer.Buffer<Nat8>(64);
 
                 for (element in elements.vals()) {
-                    let elementResult = encodeDER(element);
-                    switch (elementResult) {
-                        case (#err(e)) return #err(e);
-                        case (#ok(bytes)) {
-                            for (b in bytes.vals()) contentsBuffer.add(b);
-                        };
-                    };
+                    let elementBytes = encodeDER(element);
+                    for (b in elementBytes.vals()) contentsBuffer.add(b);
                 };
 
                 let contents = Buffer.toArray(contentsBuffer);
@@ -682,13 +673,8 @@ module {
                 let contentsBuffer = Buffer.Buffer<Nat8>(64);
 
                 for (element in elements.vals()) {
-                    let elementResult = encodeDER(element);
-                    switch (elementResult) {
-                        case (#err(e)) return #err(e);
-                        case (#ok(bytes)) {
-                            for (b in bytes.vals()) contentsBuffer.add(b);
-                        };
-                    };
+                    let elementBytes = encodeDER(element);
+                    for (b in elementBytes.vals()) contentsBuffer.add(b);
                 };
 
                 let contents = Buffer.toArray(contentsBuffer);
@@ -716,52 +702,47 @@ module {
                     };
                     case (?innerValue) {
                         // Encode inner value
-                        let innerResult = encodeDER(innerValue);
-                        switch (innerResult) {
-                            case (#err(e)) return #err(e);
-                            case (#ok(innerBytes)) {
-                                // For constructed, we only need the value part, not the entire TLV
-                                if (constructed) {
-                                    // Skip the first byte (tag) and extract the inner value
-                                    var i = 1; // Start after tag
+                        let innerBytes = encodeDER(innerValue);
+                        // For constructed, we only need the value part, not the entire TLV
+                        if (constructed) {
+                            // Skip the first byte (tag) and extract the inner value
+                            var i = 1; // Start after tag
 
-                                    // Skip the length bytes
-                                    if (i < innerBytes.size()) {
-                                        let lengthByte = innerBytes[i];
-                                        i += 1;
+                            // Skip the length bytes
+                            if (i < innerBytes.size()) {
+                                let lengthByte = innerBytes[i];
+                                i += 1;
 
-                                        if (lengthByte >= 0x80) {
-                                            let numLengthBytes = Nat8.toNat(lengthByte & 0x7F);
-                                            i += numLengthBytes;
-                                        };
-                                    };
-
-                                    // Calculate content length
-                                    let contentLength = if (i < innerBytes.size()) {
-                                        innerBytes.size() - i : Nat;
-                                    } else {
-                                        0;
-                                    };
-
-                                    // Length
-                                    let lengthBytes = encodeLength(contentLength);
-                                    for (b in lengthBytes.vals()) encoded.add(b);
-
-                                    // Value (just the content part)
-                                    while (i < innerBytes.size()) {
-                                        encoded.add(innerBytes[i]);
-                                        i += 1;
-                                    };
-                                } else {
-                                    // For primitive, use the entire encoding
-                                    // Length
-                                    let length = encodeLength(innerBytes.size());
-                                    for (b in length.vals()) encoded.add(b);
-
-                                    // Value
-                                    for (b in innerBytes.vals()) encoded.add(b);
+                                if (lengthByte >= 0x80) {
+                                    let numLengthBytes = Nat8.toNat(lengthByte & 0x7F);
+                                    i += numLengthBytes;
                                 };
                             };
+
+                            // Calculate content length
+                            let contentLength = if (i < innerBytes.size()) {
+                                innerBytes.size() - i : Nat;
+                            } else {
+                                0;
+                            };
+
+                            // Length
+                            let lengthBytes = encodeLength(contentLength);
+                            for (b in lengthBytes.vals()) encoded.add(b);
+
+                            // Value (just the content part)
+                            while (i < innerBytes.size()) {
+                                encoded.add(innerBytes[i]);
+                                i += 1;
+                            };
+                        } else {
+                            // For primitive, use the entire encoding
+                            // Length
+                            let length = encodeLength(innerBytes.size());
+                            for (b in length.vals()) encoded.add(b);
+
+                            // Value
+                            for (b in innerBytes.vals()) encoded.add(b);
                         };
                     };
                 };
@@ -808,7 +789,7 @@ module {
             };
         };
 
-        #ok(Buffer.toArray(encoded));
+        Buffer.toArray(encoded);
     };
 
     // Encode a tag byte
@@ -889,22 +870,11 @@ module {
     };
 
     // Encode an OBJECT_identifier
-    private func encodeObjectIdentifier(oid : [Nat]) : Result.Result<[Nat8], Text> {
-        if (oid.size() < 2) {
-            return #err("OID must have at least 2 components");
-        };
+    private func encodeObjectIdentifier(oid : [Nat]) : [Nat8] {
 
         // Validate first two components
         let first = oid[0];
         let second = oid[1];
-
-        if (first > 2) {
-            return #err("First OID component must be 0, 1, or 2");
-        };
-
-        if (first < 2 and second >= 40) {
-            return #err("Second OID component must be < 40 when first component is 0 or 1");
-        };
 
         let encoded = Buffer.Buffer<Nat8>(oid.size() * 2); // Reasonable estimate
 
@@ -943,7 +913,7 @@ module {
             };
         };
 
-        #ok(Buffer.toArray(encoded));
+        Buffer.toArray(encoded);
     };
 
     // ===== UTILITY FUNCTIONS =====
