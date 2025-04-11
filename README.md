@@ -49,10 +49,7 @@ let sequence = #sequence([
 ]);
 
 // Encode to DER format
-let bytes : [Nat8] = switch (ASN1.encodeDER(sequence)) {
-    case (#err(msg)) return #err(msg);
-    case (#ok(bytes)) bytes;
-};
+let bytes : [Nat8] = ASN1.encodeDER(sequence);
 ...
 ```
 
@@ -124,7 +121,7 @@ public type TagClass = {
 public type ASN1Value = {
     #boolean : Bool;
     #integer : Int;
-    #bitString : [Bool];
+    #bitString : BitString;
     #octetString : [Nat8];
     #null_;
     #objectIdentifier : [Nat];
@@ -135,8 +132,16 @@ public type ASN1Value = {
     #generalizedTime : Text;
     #sequence : [ASN1Value];
     #set : [ASN1Value];
+    // Context-specific types
     #contextSpecific : ContextSpecificASN1Value;
+    // Unknown types - store raw data
     #unknown : UnknownASN1Value;
+};
+
+public type BitString = {
+    data : [Nat8];
+    // Number of unused bits in the last byte (0-7)
+    unusedBits : Nat8;
 };
 
 public type ContextSpecificASN1Value = {
@@ -159,7 +164,9 @@ public type UnknownASN1Value = {
 // Main encoding/decoding functions
 public func decodeDER(bytes : [Nat8]) : Result.Result<ASN1Value, Text>;
 
-public func encodeDER(value : ASN1Value) : Result.Result<[Nat8], Text>;
+public func encodeDER(value : ASN1Value) : [Nat8];
+
+public func encodeDERToBuffer(buffer : Buffer.Buffer<Nat>, value : ASN1Value);
 
 // Utility function for pretty-printing
 public func toText(value : ASN1Value) : Text;
