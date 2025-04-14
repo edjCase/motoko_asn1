@@ -6,7 +6,7 @@ xtended-numbers = "0.4.0"
 
 [package]
 name = "asn1"
-version = "2.0.1"
+version = "2.0.2"
 description = "A Motoko implementation of ASN.1 (Abstract Syntax Notation One) encoding and decoding"
 repository = "https://github.com/edjcase/motoko_asn1"
 keywords = ["asn1", "der", "encode", "decode"]
