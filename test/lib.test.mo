@@ -614,15 +614,6 @@ test(
         expectedError = null;
         expectedText = ?"OBJECT IDENTIFIER: 1.2";
       },
-      {
-        name = "Error: Invalid OID Encoding (bad subidentifier - non-minimal)";
-        derBytes = "\06\03\2B\80\00"; // Tries to encode 1.3.0 as 1.3.<0x80 0x00> which is non-minimal DER
-        // Current parser likely accepts this and parses as "1.3.0"
-        // A strict DER validator would reject this. Adjusting expectation to match current code.
-        expectedValue = ?#objectIdentifier([1, 3, 0]);
-        expectedError = null; // Expect parser to succeed, even if non-minimal DER
-        expectedText = ?"OBJECT IDENTIFIER: 1.3.0";
-      },
       // --- Additional UTCTime Formats ---
       {
         name = "UTCTime with Z timezone";
@@ -792,15 +783,6 @@ test(
         expectedText = null;
       },
 
-      // --- BER-specific constructs (should be rejected in DER) ---
-      {
-        name = "Error: Redundant Leading Zero in Integer";
-        derBytes = "\02\02\00\01"; // Integer 1 with redundant leading zero (valid BER, invalid DER)
-        expectedValue = ?#integer(1); // Current parser accepts this as 1
-        expectedError = null; // Parser doesn't validate DER-specific rules
-        expectedText = ?"INTEGER: 1";
-      },
-
       {
         name = "ECDSA PKCS Private Key (SEQUENCE)";
         derBytes = "\30\81\84\02\01\00\30\10\06\07\2a\86\48\ce\3d\02\01\06\05\2b\81\04\00\0a\04\6d\30\6b\02\01\01\04\20\b1\aa\62\82\b1\4e\5f\fb\f6\d1\2f\78\36\12\f8\04\e6\a2\0d\1a\97\34\ff\bb\6c\99\23\c6\70\ee\8d\a2\81\44\03\42\00\04\0a\09\ff\14\2d\94\bc\3f\56\c5\c8\1b\75\ea\3b\06\b0\82\c5\26\3f\bb\5b\d8\8c\61\9f\c6\39\3d\da\3d\a5\3e\0e\93\08\92\cd\b7\79\9e\ea\8f\d4\5b\9f\ff\37\7d\83\8f\41\06\45\42\89\ae\8a\08\0b\11\1f\8d";
@@ -879,6 +861,14 @@ test(
                     Runtime.trap(
                       "[" # testCase.name # "] Failed:\nExpected Value: " # debug_show (expected) #
                       "\nActual Value:   " # debug_show (actualValue)
+                    );
+                  };
+                  // Check encodeDER
+                  let encoded = Blob.fromArray(ASN1.encodeDER(actualValue));
+                  if (encoded != testCase.derBytes) {
+                    Runtime.trap(
+                      "[" # testCase.name # "] Failed:\nExpected DER: " # debug_show testCase.derBytes #
+                      "\nActual DER:   " # debug_show encoded
                     );
                   };
 

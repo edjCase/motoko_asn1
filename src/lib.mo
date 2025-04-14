@@ -672,35 +672,11 @@ module {
 
                         // For constructed, we only need the value part, not the entire TLV
                         if (constructed) {
-                            // Skip the first byte (tag) and extract the inner value
-                            var i = 1; // Start after tag
-
-                            // Skip the length bytes
-                            if (i < innerBuffer.size()) {
-                                let lengthByte = innerBuffer.get(i);
-                                i += 1;
-
-                                if (lengthByte >= 0x80) {
-                                    let numLengthBytes = Nat8.toNat(lengthByte & 0x7F);
-                                    i += numLengthBytes;
-                                };
-                            };
-
-                            // Calculate content length
-                            let contentLength : Nat = if (i < innerBuffer.size()) {
-                                innerBuffer.size() - i;
-                            } else {
-                                0;
-                            };
-
                             // Length
-                            encodeLength(buffer, contentLength);
+                            encodeLength(buffer, innerBuffer.size());
 
-                            // Value (just the content part)
-                            while (i < innerBuffer.size()) {
-                                buffer.add(innerBuffer.get(i));
-                                i += 1;
-                            };
+                            // Value (include the entire inner encoding)
+                            for (b in innerBuffer.vals()) buffer.add(b);
                         } else {
                             // For primitive, use the entire encoding
                             // Length
