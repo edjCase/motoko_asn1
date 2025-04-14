@@ -800,6 +800,60 @@ test(
         expectedError = null; // Parser doesn't validate DER-specific rules
         expectedText = ?"INTEGER: 1";
       },
+
+      {
+        name = "ECDSA PKCS Private Key (SEQUENCE)";
+        derBytes = "\30\81\84\02\01\00\30\10\06\07\2a\86\48\ce\3d\02\01\06\05\2b\81\04\00\0a\04\6d\30\6b\02\01\01\04\20\b1\aa\62\82\b1\4e\5f\fb\f6\d1\2f\78\36\12\f8\04\e6\a2\0d\1a\97\34\ff\bb\6c\99\23\c6\70\ee\8d\a2\81\44\03\42\00\04\0a\09\ff\14\2d\94\bc\3f\56\c5\c8\1b\75\ea\3b\06\b0\82\c5\26\3f\bb\5b\d8\8c\61\9f\c6\39\3d\da\3d\a5\3e\0e\93\08\92\cd\b7\79\9e\ea\8f\d4\5b\9f\ff\37\7d\83\8f\41\06\45\42\89\ae\8a\08\0b\11\1f\8d";
+        expectedValue = ?#sequence([
+          #integer(0),
+          #sequence([
+            #objectIdentifier([1, 2, 840, 10045, 2, 1]),
+            #objectIdentifier([1, 3, 132, 0, 10]),
+          ]),
+          #octetString([48, 107, 2, 1, 1, 4, 32, 177, 170, 98, 130, 177, 78, 95, 251, 246, 209, 47, 120, 54, 18, 248, 4, 230, 162, 13, 26, 151, 52, 255, 187, 108, 153, 35, 198, 112, 238, 141, 162, 129, 68, 3, 66, 0, 4, 10, 9, 255, 20, 45, 148, 188, 63, 86, 197, 200, 27, 117, 234, 59, 6, 176, 130, 197, 38, 63, 187, 91, 216, 140, 97, 159, 198, 57, 61, 218, 61, 165, 62, 14, 147, 8, 146, 205, 183, 121, 158, 234, 143, 212, 91, 159, 255, 55, 125, 131, 143, 65, 6, 69, 66, 137, 174, 138, 8, 11, 17, 31, 141]),
+        ]);
+        expectedError = null;
+        expectedText = ?"SEQUENCE {
+  INTEGER: 0
+  SEQUENCE {
+    OBJECT IDENTIFIER: 1.2.840.10045.2.1
+    OBJECT IDENTIFIER: 1.3.132.0.10
+  }
+  OCTET STRING: 306B0201010420B1AA6282B14E5FFBF6D12F783612F804E6A20D1A9734FFBB6C9923C670EE8DA28144034200040A09FF142D94BC3F56C5C81B75EA3B06B082C5263FBB5BD88C619FC6393DDA3DA53E0E930892CDB7799EEA8FD45B9FFF377D838F4106454289AE8A080B111F8D
+}";
+      },
+      {
+        name = "ECDSA SEC1 Private Key (SEQUENCE)";
+        derBytes = "\30\77\02\01\01\04\20\d6\b2\38\d6\3b\0d\5a\ce\19\92\8d\05\75\2d\45\9a\d1\1c\e5\9a\02\55\f2\2e\af\56\d3\b9\02\2a\eb\d2\a0\0a\06\08\2a\86\48\ce\3d\03\01\07\a1\44\03\42\00\04\d3\0d\17\12\6b\01\57\66\ad\16\f0\aa\aa\00\49\a6\e6\7e\24\b7\e4\b3\1b\cd\7d\d7\b0\fc\dd\cb\67\31\ce\c5\09\f9\de\a4\fd\cb\79\af\cf\2c\37\5c\e6\9d\a5\51\e5\79\da\52\97\06\64\aa\86\6f\e9\8a\90\ed";
+        expectedValue = ?#sequence([
+          #integer(1),
+          #octetString([214, 178, 56, 214, 59, 13, 90, 206, 25, 146, 141, 5, 117, 45, 69, 154, 209, 28, 229, 154, 2, 85, 242, 46, 175, 86, 211, 185, 2, 42, 235, 210]),
+          #contextSpecific({
+            tagNumber = 0;
+            constructed = true;
+            value = ?#objectIdentifier([1, 2, 840, 10_045, 3, 1, 7]);
+          }),
+          #contextSpecific({
+            tagNumber = 1;
+            constructed = true;
+            value = ?#bitString({
+              data = [4, 211, 13, 23, 18, 107, 1, 87, 102, 173, 22, 240, 170, 170, 0, 73, 166, 230, 126, 36, 183, 228, 179, 27, 205, 125, 215, 176, 252, 221, 203, 103, 49, 206, 197, 9, 249, 222, 164, 253, 203, 121, 175, 207, 44, 55, 92, 230, 157, 165, 81, 229, 121, 218, 82, 151, 6, 100, 170, 134, 111, 233, 138, 144, 237];
+              unusedBits = 0;
+            });
+          }),
+        ]);
+        expectedError = null;
+        expectedText = ?"SEQUENCE {
+  INTEGER: 1
+  OCTET STRING: D6B238D63B0D5ACE19928D05752D459AD11CE59A0255F22EAF56D3B9022AEBD2
+  [0] CONSTRUCTED {
+    OBJECT IDENTIFIER: 1.2.840.10045.3.1.7
+  }
+  [1] CONSTRUCTED {
+    BIT STRING: [0 unused bits] 04D30D17126B015766AD16F0AAAA0049A6E67E24B7E4B31BCD7DD7B0FCDDCB6731CEC509F9DEA4FDCB79AFCF2C375CE69DA551E579DA52970664AA866FE98A90ED
+  }
+}";
+      },
     ];
 
     for (testCase in cases.vals()) {
