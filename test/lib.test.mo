@@ -1,7 +1,7 @@
 import { test } "mo:test";
-import Runtime "mo:new-base/Runtime";
-import Text "mo:new-base/Text";
-import Blob "mo:new-base/Blob";
+import Runtime "mo:core/Runtime";
+import Text "mo:core/Text";
+import Blob "mo:core/Blob";
 import ASN1 "../src";
 
 type TestCase = {
@@ -839,8 +839,8 @@ test(
     ];
 
     for (testCase in cases.vals()) {
-      // Test decodeDER
-      let result = ASN1.decodeDER(testCase.derBytes.vals());
+      // Test fromBytes
+      let result = ASN1.fromBytes(testCase.derBytes.vals(), #der);
 
       switch (result) {
         case (#ok(actualValue)) {
@@ -863,8 +863,8 @@ test(
                       "\nActual Value:   " # debug_show (actualValue)
                     );
                   };
-                  // Check encodeDER
-                  let encoded = Blob.fromArray(ASN1.encodeDER(actualValue));
+                  // Check toBytes
+                  let encoded = Blob.fromArray(ASN1.toBytes(actualValue, #der));
                   if (encoded != testCase.derBytes) {
                     Runtime.trap(
                       "[" # testCase.name # "] Failed:\nExpected DER: " # debug_show testCase.derBytes #

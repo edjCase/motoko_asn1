@@ -33,13 +33,10 @@ To set up MOPS package manager, follow the instructions from the [MOPS Site](htt
 
 ## Quick Start
 
-### Example 1: Encoding ASN.1 to DER
+### Example 1: Encoding ASN.1
 
 ```motoko
 import ASN1 "mo:asn1";
-import Result "mo:base/Result";
-import Debug "mo:base/Debug";
-import Nat "mo:base/Nat";
 
 // Create an ASN.1 SEQUENCE value
 let sequence = #sequence([
@@ -49,22 +46,42 @@ let sequence = #sequence([
 ]);
 
 // Encode to DER format
-let bytes : [Nat8] = ASN1.encodeDER(sequence);
+let bytes : [Nat8] = ASN1.toBytes(sequence, #der);
 ...
 ```
 
-### Example 2: Decoding DER to ASN.1
+OR use a buffer
 
 ```motoko
 import ASN1 "mo:asn1";
-import Result "mo:base/Result";
-import Debug "mo:base/Debug";
+import Buffer "mo:buffer";
+
+// Create an ASN.1 SEQUENCE value
+let sequence = #sequence([
+    #integer(123),
+    #utf8String("Hello ASN.1"),
+    #boolean(true)
+]);
+let list = List.empty<Nat8>();
+
+// Encode to DER format
+ASN1.toBytesBuffer(Buffer.fromList(list), sequence, #der);
+// 'list' now contains DER bytes
+...
+```
+
+### Example 2: Decoding to ASN.1
+
+```motoko
+import ASN1 "mo:asn1";
+import Result "mo:core/Result";
+import Debug "mo:core/Debug";
 
 // Assuming 'derBytes' contains DER-encoded data
 let derBytes : [Nat8] = [...];
 
 // Decode from DER
-let value : ASN1.ASN1Value = switch (ASN1.decodeDER(derBytes.vals())) {
+let value : ASN1.ASN1Value = switch (ASN1.fromBytes(derBytes.vals(), #der)) {
     case (#err(msg)) return #err(msg);
     case (#ok(value)) value;
 };
@@ -74,7 +91,7 @@ let value : ASN1.ASN1Value = switch (ASN1.decodeDER(derBytes.vals())) {
 
 ```motoko
 import ASN1 "mo:asn1";
-import Debug "mo:base/Debug";
+import Debug "mo:core/Debug";
 
 // Create an ASN.1 structure
 let certificate = #sequence([
@@ -156,17 +173,21 @@ public type UnknownASN1Value = {
     constructed : Bool;
     data : [Nat8];
 };
+
+public type Encoding = {
+    #der;
+};
 ```
 
 ### Functions
 
 ```motoko
 // Main encoding/decoding functions
-public func decodeDER(bytes : [Nat8]) : Result.Result<ASN1Value, Text>;
+public func fromBytes(bytes : [Nat8], encoding : Encoding) : Result.Result<ASN1Value, Text>;
 
-public func encodeDER(value : ASN1Value) : [Nat8];
+public func toBytes(value : ASN1Value, encoding : Encoding) : [Nat8];
 
-public func encodeDERToBuffer(buffer : Buffer.Buffer<Nat>, value : ASN1Value);
+public func toBytesToBuffer(buffer : Buffer.Buffer<Nat>, value : ASN1Value, encoding : Encoding);
 
 // Utility function for pretty-printing
 public func toText(value : ASN1Value) : Text;
