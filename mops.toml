@@ -1,15 +1,15 @@
 [package]
 name = "asn1"
-version = "3.0.0"
+version = "3.0.1"
 description = "A Motoko implementation of ASN.1 (Abstract Syntax Notation One) encoding and decoding"
 repository = "https://github.com/edjcase/motoko_asn1"
-keywords = [ "asn1", "der", "encode", "decode" ]
+keywords = ["asn1", "der", "encode", "decode"]
 license = "MIT"
 
 [dependencies]
 xtended-numbers = "2.0.0"
 core = "0.6.0"
-xtended-iter = "0.0.1"
+xtended-iter = "1.0.0"
 
 [dev-dependencies]
 test = "2.1.1"
